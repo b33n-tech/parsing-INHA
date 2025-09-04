@@ -37,23 +37,27 @@ if uploaded_file:
     st.write("Aperçu des données :")
     st.dataframe(df.head())
 
-    # Sélection de la colonne
-    column = st.selectbox("Choisissez la colonne contenant les dates", df.columns)
+    # Sélection de plusieurs colonnes
+    columns = st.multiselect("Choisissez les colonnes contenant les dates", df.columns)
 
     if st.button("Convertir les dates"):
-        df[column] = df[column].apply(parse_french_date)
-        st.success("Conversion terminée ! Les dates invalides sont marquées DATE_INVALID.")
-        st.dataframe(df.head())
+        if columns:
+            for col in columns:
+                df[col] = df[col].apply(parse_french_date)
+            st.success("Conversion terminée ! Les dates invalides sont marquées DATE_INVALID.")
+            st.dataframe(df.head())
 
-        # Préparer le fichier à télécharger
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False)
-        buffer.seek(0)
+            # Préparer le fichier à télécharger
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False)
+            buffer.seek(0)
 
-        st.download_button(
-            label="Télécharger le fichier modifié",
-            data=buffer,
-            file_name="dates_converties.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            st.download_button(
+                label="Télécharger le fichier modifié",
+                data=buffer,
+                file_name="dates_converties.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning("Veuillez sélectionner au moins une colonne.")
