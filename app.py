@@ -31,15 +31,18 @@ STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
 
-# Fonction de parsing des dates et conversion en format DD/MM/YYYY
+# Conversion des dates françaises et anglaises au format DD/MM/YYYY
 def format_date(date_str: str) -> str:
+    if not date_str:
+        return ""
+    # Nettoyage des espaces et tabulations
+    clean_str = re.sub(r"[\t\s]+", " ", date_str.strip())
     try:
-        # Supprimer les tabulations ou espaces parasites
-        clean_str = re.sub(r"[\t\s]+", " ", date_str.strip())
-        dt = date_parser.parse(clean_str, dayfirst=True)
+        # forcer dayfirst=True pour interpréter correctement les dates françaises
+        dt = date_parser.parse(clean_str, dayfirst=True, fuzzy=True)
         return dt.strftime("%d/%m/%Y")
     except:
-        return date_str
+        return clean_str
 
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
