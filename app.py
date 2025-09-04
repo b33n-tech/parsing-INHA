@@ -31,19 +31,6 @@ STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
 
-# Conversion des dates françaises et anglaises au format DD/MM/YYYY
-def format_date(date_str: str) -> str:
-    if not date_str:
-        return ""
-    # Nettoyage des espaces et tabulations
-    clean_str = re.sub(r"[\t\s]+", " ", date_str.strip())
-    try:
-        # forcer dayfirst=True pour interpréter correctement les dates françaises
-        dt = date_parser.parse(clean_str, dayfirst=True, fuzzy=True)
-        return dt.strftime("%d/%m/%Y")
-    except:
-        return clean_str
-
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
     m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
@@ -80,7 +67,7 @@ def parse_fiche(text: str) -> dict:
 
     m = re.search(r"(?:Mis à jour le|Dernière mise à jour le)\s+(.+)", text)
     if m:
-        data["Dernière mise à jour"] = format_date(m.group(1).strip())
+        data["Dernière mise à jour"] = m.group(1).strip()
 
     m = re.search(r"\((.*?)\s*[–-]\s*(.*?)\)", text)
     if m:
@@ -88,14 +75,14 @@ def parse_fiche(text: str) -> dict:
         deces = m.group(2).strip()
         if "," in naissance:
             dn, ln = naissance.split(",", 1)
-            data["Date Naissance"], data["Lieu Naissance"] = format_date(dn.strip()), ln.strip()
+            data["Date Naissance"], data["Lieu Naissance"] = dn.strip(), ln.strip()
         else:
-            data["Date Naissance"] = format_date(naissance)
+            data["Date Naissance"] = naissance
         if "," in deces:
             dd, ld = deces.split(",", 1)
-            data["Date Décès"], data["Lieu Décès"] = format_date(dd.strip()), ld.strip()
+            data["Date Décès"], data["Lieu Décès"] = dd.strip(), ld.strip()
         else:
-            data["Date Décès"] = format_date(deces)
+            data["Date Décès"] = deces
 
     data["Auteur de la notice"] = extract_author(text)
     data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text, strict=True)
@@ -105,9 +92,18 @@ def parse_fiche(text: str) -> dict:
     return data
 
 # Étape 3 : Parser toutes les fiches
+parsed_list = []
+df = pd.DataFrame()
 if st.button("Parser toutes les fiches"):
     parsed_list = [parse_fiche(fiche) for fiche in fiches_input]
     df = pd.DataFrame(parsed_list)
+    st.dataframe(df)
+
+# Étape 4 : Convertir les colonnes de dates en DD/MM/YYYY
+if not df.empty and st.button("Convertir les dates en DD/MM/YYYY"):
+    for col in ["Dernière mise à jour", "Date Naissance", "Date Décès"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y") if pd.notna(x) and str(x).strip() != '' else '')
     st.dataframe(df)
 
     output = BytesIO()
