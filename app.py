@@ -65,7 +65,7 @@ def parse_fiche(text: str) -> dict:
         "Auteur de la notice": None,
         "Profession ou activité principale": None,
         "Autres activités": None,
-        "Sujets d’étude": None,
+        "Sujets d’étude": None
     }
 
     m = re.match(rf"^([{UPPER}\-\s']+,.*)$", text.strip())
@@ -92,4 +92,24 @@ def parse_fiche(text: str) -> dict:
             data["Date Décès"] = format_date(deces)
 
     data["Auteur de la notice"] = extract_author(text)
-    data["Profession
+    data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text, strict=True)
+    data["Autres activités"] = extract_section("Autres activités", text, strict=True)
+    data["Sujets d’étude"] = extract_section("Sujets d’étude", text, strict=True)
+
+    return data
+
+# Étape 3 : Parser toutes les fiches
+if st.button("Parser toutes les fiches"):
+    parsed_list = [parse_fiche(fiche) for fiche in fiches_input]
+    df = pd.DataFrame(parsed_list)
+    st.dataframe(df)
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Fiches")
+    st.download_button(
+        label="Télécharger toutes les fiches en XLSX",
+        data=output.getvalue(),
+        file_name="fiches_inha.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
