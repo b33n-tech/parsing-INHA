@@ -98,22 +98,9 @@ if st.button("Parser toutes les fiches"):
     st.session_state['df'] = df
 
 if 'df' in st.session_state and not st.session_state['df'].empty:
-    df_display = st.session_state['df']
-    st.dataframe(df_display)
+    st.dataframe(st.session_state['df'])
 
-    # --- Step 4 : conversion des dates avec sécurité ------------------------
-    if st.button("Convertir les dates en DD/MM/YYYY"):
-        def safe_format(x):
-            try:
-                return date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y")
-            except:
-                return str(x)
-        for col in ["Dernière mise à jour", "Date Naissance", "Date Décès"]:
-            if col in st.session_state['df'].columns:
-                st.session_state['df'][col] = st.session_state['df'][col].apply(lambda x: safe_format(x) if pd.notna(x) and str(x).strip() != '' else '')
-        st.dataframe(st.session_state['df'])
-
-    # --- Step 5 : Téléchargement -------------------------------------------
+    # --- Step 4 : Téléchargement -------------------------------------------
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         st.session_state['df'].to_excel(writer, index=False, sheet_name="Fiches")
