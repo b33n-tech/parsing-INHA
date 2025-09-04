@@ -31,8 +31,8 @@ def extract_author(text: str) -> str | None:
 def extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
     text = normalize_text(text)
     if label_regex == "Sujets d’étude":
-        # Extraire jusqu'au mot 'Carrère'
-        pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?)(?=\bCarrère\b|$)"
+        # Extraire jusqu'au mot 'Carrière'
+        pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?)(?=\bCarrière\b|$)"
     else:
         pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?){STOP_AT_NEXT_LABEL}"
     m = re.search(pattern, text, flags=re.S)
