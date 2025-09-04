@@ -17,13 +17,13 @@ def parse_fiche(text):
         "Date Naissance": None,
         "Lieu Naissance": None,
         "Date Décès": None,
+        "Lieu Décès": None,
         "Auteur de la notice": None,
-        "Profession principale": None,
+        "Profession ou activité principale": None,
         "Autres activités": None,
         "Sujets d’étude": None
     }
 
-    # Regex et extractions
     # Nom : première ligne en majuscules
     m = re.match(r"^([A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ\-\s']+),?", text.strip())
     if m:
@@ -34,28 +34,37 @@ def parse_fiche(text):
     if m:
         data["Dernière mise à jour"] = m.group(1).strip()
 
-    # Naissance + Décès + Lieu
+    # Naissance + Décès + Lieux
     m = re.search(r"\((.*) – (.*)\)", text)
     if m:
         naissance = m.group(1)
         décès = m.group(2)
+
+        # Naissance : date + lieu
         if "," in naissance:
             dn, ln = naissance.split(",", 1)
             data["Date Naissance"] = dn.strip()
             data["Lieu Naissance"] = ln.strip()
         else:
             data["Date Naissance"] = naissance.strip()
-        data["Date Décès"] = décès.strip()
+
+        # Décès : date + lieu
+        if "," in décès:
+            dd, ld = décès.split(",", 1)
+            data["Date Décès"] = dd.strip()
+            data["Lieu Décès"] = ld.strip()
+        else:
+            data["Date Décès"] = décès.strip()
 
     # Auteur de la notice
     m = re.search(r"Auteur de la notice : (.*)", text)
     if m:
         data["Auteur de la notice"] = m.group(1).strip()
 
-    # Profession principale
+    # Profession ou activité principale
     m = re.search(r"Profession ou activité principale\n(.*)", text)
     if m:
-        data["Profession principale"] = m.group(1).strip()
+        data["Profession ou activité principale"] = m.group(1).strip()
 
     # Autres activités
     m = re.search(r"Autres activités\n(.*)", text)
