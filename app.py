@@ -7,6 +7,10 @@ st.title("Scraping fiches INHA - Historiens d’art")
 st.write("Collez le contenu **complet** de plusieurs pages ou notices (Ctrl+A > Ctrl+V) ci-dessous :")
 raw_text = st.text_area("Pages INHA")
 
+# Choisir le nombre maximum de fiches à parser
+default_max = 5
+max_fiches = st.slider("Nombre maximum de fiches à parser", min_value=1, max_value=50, value=default_max)
+
 # --- Helpers -----------------------------------------------------------------
 UPPER = "A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇŒÆ"
 
@@ -27,11 +31,12 @@ def extract_fiches(text: str) -> list:
     # Séparer les fiches sur les lignes qui commencent par NOM en majuscules
     pattern = rf"^([{UPPER}\-\s']+,.*?)(?=\n[{UPPER}\-\s']+,|$)"
     matches = re.finditer(pattern, text, flags=re.S | re.M)
-    return [m.group(1).strip() for m in matches]
+    fiches = [m.group(1).strip() for m in matches]
+    return fiches[:max_fiches]  # Limite au nombre choisi
 
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
-    m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
+    m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[	 ]*(.+)$", text, flags=re.M)
     return m.group(2).strip() if m else None
 
 def extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
