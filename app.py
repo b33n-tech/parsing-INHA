@@ -70,8 +70,12 @@ def parse_fiche(text):
         data["Auteur de la notice"] = m.group(1).strip()
 
     # Fonction pour capturer après un intitulé
-    def extract_after(label, text):
-        pattern = rf"{label}\s*\n*(.+?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
+    def extract_after(label, text, strict=False):
+        if strict:
+            # Cherche le premier caractère non espace/non saut de ligne après le label
+            pattern = rf"{label}\s*([\S\s]*?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
+        else:
+            pattern = rf"{label}\s*\n*(.+?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
         m = re.search(pattern, text, flags=re.S)
         if m:
             return m.group(1).strip().replace("\n", " ")
@@ -83,8 +87,8 @@ def parse_fiche(text):
     # Autres activités
     data["Autres activités"] = extract_after("Autres activités", text)
 
-    # Sujets d’étude
-    data["Sujets d’étude"] = extract_after("Sujets d’étude", text)
+    # Sujets d’étude (mode strict : prend dès le premier caractère non espace)
+    data["Sujets d’étude"] = extract_after("Sujets d’étude", text, strict=True)
 
     return data
 
@@ -104,3 +108,4 @@ if st.button("Parser la fiche"):
         file_name="fiche_inha.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
