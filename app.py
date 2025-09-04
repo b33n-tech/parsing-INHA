@@ -19,21 +19,25 @@ LABELS = [
 LABELS_OR = "|".join(LABELS)
 STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 
-ndef normalize_text(t: str) -> str:
+# Normalise les retours à la ligne pour regex
+def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
 
-ndef extract_fiche_block(text: str) -> str:
+# Extrait le bloc de fiche depuis le texte complet
+def extract_fiche_block(text: str) -> str:
     text = normalize_text(text)
     m = re.search(rf"(^[{UPPER}\-\s']+,.*?)(?:\n\n|$)", text, flags=re.S | re.M)
     start_idx = m.start(1) if m else 0
     return text[start_idx:]
 
-ndef extract_author(text: str) -> str | None:
+# Extrait la ligne auteur(s)
+def extract_author(text: str) -> str | None:
     text = normalize_text(text)
     m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
     return m.group(2).strip() if m else None
 
-ndef extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
+# Extrait une section après un label, avec strict pour ignorer les espaces/sauts
+def extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
     text = normalize_text(text)
     pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?){STOP_AT_NEXT_LABEL}"
     m = re.search(pattern, text, flags=re.S)
@@ -43,7 +47,8 @@ ndef extract_section(label_regex: str, text: str, strict: bool = True) -> str | 
     val = re.sub(r"\s+", " ", val)
     return val or None
 
-ndef parse_fiche(text: str) -> dict:
+# Parse le contenu de la fiche
+def parse_fiche(text: str) -> dict:
     text = normalize_text(text)
     data = {
         "Nom": None,
@@ -66,7 +71,7 @@ ndef parse_fiche(text: str) -> dict:
     if m:
         data["Dernière mise à jour"] = m.group(1).strip()
 
-    # Dates / lieux: line like "(26 février 1781, Paris – 12 juillet 1863, Versailles)"
+    # Dates / lieux: ligne type "(26 février 1781, Paris – 12 juillet 1863, Versailles)"
     m = re.search(r"\((.*?)\s*[–-]\s*(.*?)\)", text)
     if m:
         naissance = m.group(1).strip()
