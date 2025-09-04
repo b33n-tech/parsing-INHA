@@ -101,12 +101,16 @@ if 'df' in st.session_state and not st.session_state['df'].empty:
     df_display = st.session_state['df']
     st.dataframe(df_display)
 
-    # --- Step 4 : conversion des dates --------------------------------------
+    # --- Step 4 : conversion des dates avec sécurité ------------------------
     if st.button("Convertir les dates en DD/MM/YYYY"):
+        def safe_format(x):
+            try:
+                return date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y")
+            except:
+                return str(x)
         for col in ["Dernière mise à jour", "Date Naissance", "Date Décès"]:
             if col in st.session_state['df'].columns:
-                st.session_state['df'][col] = st.session_state['df'][col].apply(
-                    lambda x: date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y") if pd.notna(x) and str(x).strip() != '' else '')
+                st.session_state['df'][col] = st.session_state['df'][col].apply(lambda x: safe_format(x) if pd.notna(x) and str(x).strip() != '' else '')
         st.dataframe(st.session_state['df'])
 
     # --- Step 5 : Téléchargement -------------------------------------------
