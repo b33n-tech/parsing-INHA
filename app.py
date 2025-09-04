@@ -5,9 +5,17 @@ from io import BytesIO
 
 st.title("Scraping fiches INHA - Historiens d’art")
 
-st.write("Collez le contenu brut d’une fiche ci-dessous :")
+st.write("Collez le contenu brut d’une page complète (Ctrl+A > Ctrl+V) ci-dessous :")
 
-raw_text = st.text_area("Fiche INHA")
+raw_text = st.text_area("Page INHA")
+
+# Fonction pour isoler le bloc fiche biographique
+def extract_fiche_block(text):
+    # On cherche une ligne avec NOM en majuscules, jusqu'à "Sujets d’étude" inclus
+    m = re.search(r"([A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ\-\s']+,.*?Sujets d’étude.*?)(\n|$)", text, flags=re.S)
+    if m:
+        return m.group(1).strip()
+    return text  # fallback : si on ne trouve pas, on renvoie tout
 
 # Fonction de parsing robuste
 def parse_fiche(text):
@@ -81,7 +89,8 @@ def parse_fiche(text):
     return data
 
 if st.button("Parser la fiche"):
-    parsed = parse_fiche(raw_text)
+    fiche_text = extract_fiche_block(raw_text)
+    parsed = parse_fiche(fiche_text)
     df = pd.DataFrame([parsed])
     st.dataframe(df)
 
