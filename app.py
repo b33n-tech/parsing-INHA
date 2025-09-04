@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 from io import BytesIO
+from dateutil import parser as date_parser
 
 st.title("Scraping fiches INHA - Historiens d’art")
 
@@ -29,6 +30,13 @@ STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 
 def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
+
+def format_date(date_str: str) -> str:
+    try:
+        dt = date_parser.parse(date_str, dayfirst=True)
+        return dt.strftime("%d/%m/%Y")
+    except:
+        return date_str
 
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
@@ -66,7 +74,7 @@ def parse_fiche(text: str) -> dict:
 
     m = re.search(r"(?:Mis à jour le|Dernière mise à jour le)\s+(.+)", text)
     if m:
-        data["Dernière mise à jour"] = m.group(1).strip()
+        data["Dernière mise à jour"] = format_date(m.group(1).strip())
 
     m = re.search(r"\((.*?)\s*[–-]\s*(.*?)\)", text)
     if m:
@@ -74,34 +82,14 @@ def parse_fiche(text: str) -> dict:
         deces = m.group(2).strip()
         if "," in naissance:
             dn, ln = naissance.split(",", 1)
-            data["Date Naissance"], data["Lieu Naissance"] = dn.strip(), ln.strip()
+            data["Date Naissance"], data["Lieu Naissance"] = format_date(dn.strip()), ln.strip()
         else:
-            data["Date Naissance"] = naissance
+            data["Date Naissance"] = format_date(naissance)
         if "," in deces:
             dd, ld = deces.split(",", 1)
-            data["Date Décès"], data["Lieu Décès"] = dd.strip(), ld.strip()
+            data["Date Décès"], data["Lieu Décès"] = format_date(dd.strip()), ld.strip()
         else:
-            data["Date Décès"] = deces
+            data["Date Décès"] = format_date(deces)
 
     data["Auteur de la notice"] = extract_author(text)
-    data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text, strict=True)
-    data["Autres activités"] = extract_section("Autres activités", text, strict=True)
-    data["Sujets d’étude"] = extract_section("Sujets d’étude", text, strict=True)
-
-    return data
-
-# Étape 3 : Parser toutes les fiches
-if st.button("Parser toutes les fiches"):
-    parsed_list = [parse_fiche(fiche) for fiche in fiches_input]
-    df = pd.DataFrame(parsed_list)
-    st.dataframe(df)
-
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Fiches")
-    st.download_button(
-        label="Télécharger toutes les fiches en XLSX",
-        data=output.getvalue(),
-        file_name="fiches_inha.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    data["Profession
