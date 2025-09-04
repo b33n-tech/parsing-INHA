@@ -3,97 +3,105 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.title("Scraping INHA – Extraction des notices d’historiens de l’art")
+st.title("Scraping fiches INHA - Historiens d’art")
+st.write("Collez le contenu **complet** d’une page (Ctrl+A > Ctrl+V) ci-dessous :")
+raw_text = st.text_area("Page INHA")
 
-st.markdown("""
-Collez ci-dessous **l'intégralité d'une notice (Ctrl+A → Ctrl+V)** depuis le dictionnaire de l’INHA.
-Le script extraira uniquement les champs suivants :
-- Dernière mise à jour (date)
-- Date de naissance
-- Lieu de naissance
-- Date de décès
-- Lieu de décès
-- Auteur de la notice
-- Profession ou activité principale
-- Autres activités
-- Sujets d’étude
-""")
+# --- Helpers -----------------------------------------------------------------
+UPPER = "A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇŒÆ"
 
-raw_text = st.text_area("Collez le contenu de la notice ici :", height=400)
+LABELS = [
+    "Profession ou activité principale",
+    "Autres activités",
+    "Sujets d’étude",
+    r"Auteur(?:\(s\))? de la notice"
+]
+LABELS_OR = "|".join(LABELS)
+STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 
+ndef normalize_text(t: str) -> str:
+    return t.replace("\r\n", "\n").replace("\r", "\n")
 
-def clean_value(text, label):
-    """Retourne la valeur après un label, en ignorant espaces/sauts de ligne."""
-    pattern = rf"{label}\s*\n*\s*(.*)"
-    match = re.search(pattern, text)
-    if match:
-        return match.group(1).strip()
-    return ""
+ndef extract_fiche_block(text: str) -> str:
+    text = normalize_text(text)
+    m = re.search(rf"(^[{UPPER}\-\s']+,.*?)(?:\n\n|$)", text, flags=re.S | re.M)
+    start_idx = m.start(1) if m else 0
+    return text[start_idx:]
 
+ndef extract_author(text: str) -> str | None:
+    text = normalize_text(text)
+    m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
+    return m.group(2).strip() if m else None
 
-def parse_notice(text):
-    data = {}
+ndef extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
+    text = normalize_text(text)
+    pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?){STOP_AT_NEXT_LABEL}"
+    m = re.search(pattern, text, flags=re.S)
+    if not m:
+        return None
+    val = m.group(1).strip()
+    val = re.sub(r"\s+", " ", val)
+    return val or None
 
-    # Nom (première ligne en majuscules généralement)
-    first_line = text.strip().split("\n")[0]
-    data["Nom"] = first_line.strip()
+ndef parse_fiche(text: str) -> dict:
+    text = normalize_text(text)
+    data = {
+        "Nom": None,
+        "Dernière mise à jour": None,
+        "Date Naissance": None,
+        "Lieu Naissance": None,
+        "Date Décès": None,
+        "Lieu Décès": None,
+        "Auteur de la notice": None,
+        "Profession ou activité principale": None,
+        "Autres activités": None,
+        "Sujets d’étude": None,
+    }
 
-    # Dernière mise à jour
-    m_update = re.search(r"Mis à jour le (.+)", text)
-    data["Dernière mise à jour"] = m_update.group(1).strip() if m_update else ""
+    m = re.match(rf"^([{UPPER}\-\s']+,.*)$", text.strip())
+    if m:
+        data["Nom"] = m.group(1).strip()
 
-    # Dates et lieux (ligne entre parenthèses)
-    m_dates = re.search(r"\((.*?)\)", text)
-    if m_dates:
-        life = m_dates.group(1)
-        parts = [p.strip() for p in life.split("–")]
-        if len(parts) == 2:
-            birth, death = parts
-            # Naissance
-            b_date, b_place = birth.split(",", 1)
-            data["Date naissance"] = b_date.strip()
-            data["Lieu naissance"] = b_place.strip()
-            # Décès
-            if "," in death:
-                d_date, d_place = death.split(",", 1)
-                data["Date décès"] = d_date.strip()
-                data["Lieu décès"] = d_place.strip()
-            else:
-                data["Date décès"] = death.strip()
-                data["Lieu décès"] = ""
+    m = re.search(r"(?:Mis à jour le|Dernière mise à jour le)\s+(.+)", text)
+    if m:
+        data["Dernière mise à jour"] = m.group(1).strip()
 
-    # Auteur(s) de la notice
-    m_author = re.search(r"Auteur(?:\(s\))? de la notice\s*:?\s*\n*\s*(.*)", text)
-    data["Auteur de la notice"] = m_author.group(1).strip() if m_author else ""
+    # Dates / lieux: line like "(26 février 1781, Paris – 12 juillet 1863, Versailles)"
+    m = re.search(r"\((.*?)\s*[–-]\s*(.*?)\)", text)
+    if m:
+        naissance = m.group(1).strip()
+        deces = m.group(2).strip()
+        if "," in naissance:
+            dn, ln = naissance.split(",", 1)
+            data["Date Naissance"], data["Lieu Naissance"] = dn.strip(), ln.strip()
+        else:
+            data["Date Naissance"] = naissance
+        if "," in deces:
+            dd, ld = deces.split(",", 1)
+            data["Date Décès"], data["Lieu Décès"] = dd.strip(), ld.strip()
+        else:
+            data["Date Décès"] = deces
 
-    # Profession principale
-    data["Profession ou activité principale"] = clean_value(text, "Profession ou activité principale")
-
-    # Autres activités
-    data["Autres activités"] = clean_value(text, "Autres activités")
-
-    # Sujets d’étude (stricte)
-    m_subjects = re.search(r"Sujets d’étude\s*:?\s*\n*\s*(.*)", text)
-    data["Sujets d’étude"] = m_subjects.group(1).strip() if m_subjects else ""
+    data["Auteur de la notice"] = extract_author(text)
+    data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text, strict=True)
+    data["Autres activités"] = extract_section("Autres activités", text, strict=True)
+    data["Sujets d’étude"] = extract_section("Sujets d’étude", text, strict=True)
 
     return data
 
-if st.button("Extraire les informations"):
-    if raw_text.strip():
-        parsed = parse_notice(raw_text)
-        df = pd.DataFrame([parsed])
+# --- UI ----------------------------------------------------------------------
+if st.button("Parser la fiche"):
+    fiche_text = extract_fiche_block(raw_text)
+    parsed = parse_fiche(fiche_text)
+    df = pd.DataFrame([parsed])
+    st.dataframe(df)
 
-        st.dataframe(df)
-
-        # Export XLSX
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Notice")
-        st.download_button(
-            label="📥 Télécharger en XLSX",
-            data=output.getvalue(),
-            file_name="notice_inha.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.warning("Veuillez coller une notice avant d’extraire.")
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Fiche")
+    st.download_button(
+        label="Télécharger en XLSX",
+        data=output.getvalue(),
+        file_name="fiche_inha.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
