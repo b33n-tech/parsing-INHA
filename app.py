@@ -4,12 +4,16 @@ import re
 from io import BytesIO
 
 st.title("Scraping fiches INHA - Historiens d’art")
-st.write("Collez le contenu **complet** de plusieurs pages ou notices (Ctrl+A > Ctrl+V) ci-dessous :")
-raw_text = st.text_area("Pages INHA")
 
-# Choisir le nombre maximum de fiches à parser
-default_max = 5
-max_fiches = st.slider("Nombre maximum de fiches à parser", min_value=1, max_value=50, value=default_max)
+# Étape 1 : nombre de fiches à parser
+max_fiches = st.number_input("Nombre de fiches à parser", min_value=1, max_value=50, value=5, step=1)
+
+# Étape 2 : saisie des fiches une par une
+fiches_input = []
+for i in range(max_fiches):
+    fiche_text = st.text_area(f"Fiche {i+1}", key=f"fiche_{i}")
+    if fiche_text.strip():
+        fiches_input.append(fiche_text)
 
 # --- Helpers -----------------------------------------------------------------
 UPPER = "A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇŒÆ"
@@ -25,14 +29,6 @@ STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 
 def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
-
-def extract_fiches(text: str) -> list:
-    text = normalize_text(text)
-    # Séparer les fiches sur les lignes qui commencent par NOM en majuscules
-    pattern = rf"^([{UPPER}\-\s']+,.*?)(?=\n[{UPPER}\-\s']+,|$)"
-    matches = re.finditer(pattern, text, flags=re.S | re.M)
-    fiches = [m.group(1).strip() for m in matches]
-    return fiches[:max_fiches]  # Limite au nombre choisi
 
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
@@ -94,10 +90,9 @@ def parse_fiche(text: str) -> dict:
 
     return data
 
-# --- UI ----------------------------------------------------------------------
-if st.button("Parser les fiches"):
-    all_fiches = extract_fiches(raw_text)
-    parsed_list = [parse_fiche(fiche) for fiche in all_fiches]
+# Étape 3 : Parser toutes les fiches
+if st.button("Parser toutes les fiches"):
+    parsed_list = [parse_fiche(fiche) for fiche in fiches_input]
     df = pd.DataFrame(parsed_list)
     st.dataframe(df)
 
