@@ -9,7 +9,7 @@ st.write("Collez le contenu brut d’une fiche ci-dessous :")
 
 raw_text = st.text_area("Fiche INHA")
 
-# Fonction de parsing
+# Fonction de parsing robuste
 def parse_fiche(text):
     data = {
         "Nom": None,
@@ -57,24 +57,26 @@ def parse_fiche(text):
             data["Date Décès"] = décès.strip()
 
     # Auteur de la notice
-    m = re.search(r"Auteur de la notice : (.*)", text)
+    m = re.search(r"Auteur de la notice *: *(.*)", text)
     if m:
         data["Auteur de la notice"] = m.group(1).strip()
 
+    # Fonction pour capturer après un intitulé
+    def extract_after(label, text):
+        pattern = rf"{label}\s*\n*(.+?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
+        m = re.search(pattern, text, flags=re.S)
+        if m:
+            return m.group(1).strip().replace("\n", " ")
+        return None
+
     # Profession ou activité principale
-    m = re.search(r"Profession ou activité principale\n(.*)", text)
-    if m:
-        data["Profession ou activité principale"] = m.group(1).strip()
+    data["Profession ou activité principale"] = extract_after("Profession ou activité principale", text)
 
     # Autres activités
-    m = re.search(r"Autres activités\n(.*)", text)
-    if m:
-        data["Autres activités"] = m.group(1).strip()
+    data["Autres activités"] = extract_after("Autres activités", text)
 
     # Sujets d’étude
-    m = re.search(r"Sujets d’étude\n(.*)", text)
-    if m:
-        data["Sujets d’étude"] = m.group(1).strip()
+    data["Sujets d’étude"] = extract_after("Sujets d’étude", text)
 
     return data
 
