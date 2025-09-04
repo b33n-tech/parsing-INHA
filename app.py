@@ -3,109 +3,97 @@ import pandas as pd
 import re
 from io import BytesIO
 
-st.title("Scraping fiches INHA - Historiens d’art")
+st.title("Scraping INHA – Extraction des notices d’historiens de l’art")
 
-st.write("Collez le contenu brut d’une page complète (Ctrl+A > Ctrl+V) ci-dessous :")
+st.markdown("""
+Collez ci-dessous **l'intégralité d'une notice (Ctrl+A → Ctrl+V)** depuis le dictionnaire de l’INHA.
+Le script extraira uniquement les champs suivants :
+- Dernière mise à jour (date)
+- Date de naissance
+- Lieu de naissance
+- Date de décès
+- Lieu de décès
+- Auteur de la notice
+- Profession ou activité principale
+- Autres activités
+- Sujets d’étude
+""")
 
-raw_text = st.text_area("Page INHA")
+raw_text = st.text_area("Collez le contenu de la notice ici :", height=400)
 
-# Fonction pour isoler le bloc fiche biographique
-def extract_fiche_block(text):
-    # On cherche une ligne avec NOM en majuscules, jusqu'à "Sujets d’étude" inclus
-    m = re.search(r"([A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ\-\s']+,.*?Sujets d’étude.*?)(\n|$)", text, flags=re.S)
-    if m:
-        return m.group(1).strip()
-    return text  # fallback : si on ne trouve pas, on renvoie tout
 
-# Fonction de parsing robuste
-def parse_fiche(text):
-    data = {
-        "Nom": None,
-        "Dernière mise à jour": None,
-        "Date Naissance": None,
-        "Lieu Naissance": None,
-        "Date Décès": None,
-        "Lieu Décès": None,
-        "Auteur de la notice": None,
-        "Profession ou activité principale": None,
-        "Autres activités": None,
-        "Sujets d’étude": None
-    }
+def clean_value(text, label):
+    """Retourne la valeur après un label, en ignorant espaces/sauts de ligne."""
+    pattern = rf"{label}\s*\n*\s*(.*)"
+    match = re.search(pattern, text)
+    if match:
+        return match.group(1).strip()
+    return ""
 
-    # Nom : première ligne en majuscules
-    m = re.match(r"^([A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ\-\s']+),?", text.strip())
-    if m:
-        data["Nom"] = m.group(1).strip()
+
+def parse_notice(text):
+    data = {}
+
+    # Nom (première ligne en majuscules généralement)
+    first_line = text.strip().split("\n")[0]
+    data["Nom"] = first_line.strip()
 
     # Dernière mise à jour
-    m = re.search(r"Mis à jour le (.*)", text)
-    if m:
-        data["Dernière mise à jour"] = m.group(1).strip()
+    m_update = re.search(r"Mis à jour le (.+)", text)
+    data["Dernière mise à jour"] = m_update.group(1).strip() if m_update else ""
 
-    # Naissance + Décès + Lieux
-    m = re.search(r"\((.*) – (.*)\)", text)
-    if m:
-        naissance = m.group(1)
-        décès = m.group(2)
+    # Dates et lieux (ligne entre parenthèses)
+    m_dates = re.search(r"\((.*?)\)", text)
+    if m_dates:
+        life = m_dates.group(1)
+        parts = [p.strip() for p in life.split("–")]
+        if len(parts) == 2:
+            birth, death = parts
+            # Naissance
+            b_date, b_place = birth.split(",", 1)
+            data["Date naissance"] = b_date.strip()
+            data["Lieu naissance"] = b_place.strip()
+            # Décès
+            if "," in death:
+                d_date, d_place = death.split(",", 1)
+                data["Date décès"] = d_date.strip()
+                data["Lieu décès"] = d_place.strip()
+            else:
+                data["Date décès"] = death.strip()
+                data["Lieu décès"] = ""
 
-        # Naissance : date + lieu
-        if "," in naissance:
-            dn, ln = naissance.split(",", 1)
-            data["Date Naissance"] = dn.strip()
-            data["Lieu Naissance"] = ln.strip()
-        else:
-            data["Date Naissance"] = naissance.strip()
+    # Auteur(s) de la notice
+    m_author = re.search(r"Auteur(?:\(s\))? de la notice\s*:?\s*\n*\s*(.*)", text)
+    data["Auteur de la notice"] = m_author.group(1).strip() if m_author else ""
 
-        # Décès : date + lieu
-        if "," in décès:
-            dd, ld = décès.split(",", 1)
-            data["Date Décès"] = dd.strip()
-            data["Lieu Décès"] = ld.strip()
-        else:
-            data["Date Décès"] = décès.strip()
-
-    # Auteur de la notice
-    m = re.search(r"Auteur de la notice *: *(.*)", text)
-    if m:
-        data["Auteur de la notice"] = m.group(1).strip()
-
-    # Fonction pour capturer après un intitulé
-    def extract_after(label, text, strict=False):
-        if strict:
-            # Cherche le premier caractère non espace/non saut de ligne après le label
-            pattern = rf"{label}\s*([\S\s]*?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
-        else:
-            pattern = rf"{label}\s*\n*(.+?)(?=\n[A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇ].*?:|\nAutres activités|\nSujets d’étude|\nAuteur de la notice|$)"
-        m = re.search(pattern, text, flags=re.S)
-        if m:
-            return m.group(1).strip().replace("\n", " ")
-        return None
-
-    # Profession ou activité principale
-    data["Profession ou activité principale"] = extract_after("Profession ou activité principale", text)
+    # Profession principale
+    data["Profession ou activité principale"] = clean_value(text, "Profession ou activité principale")
 
     # Autres activités
-    data["Autres activités"] = extract_after("Autres activités", text)
+    data["Autres activités"] = clean_value(text, "Autres activités")
 
-    # Sujets d’étude (mode strict : prend dès le premier caractère non espace)
-    data["Sujets d’étude"] = extract_after("Sujets d’étude", text, strict=True)
+    # Sujets d’étude (stricte)
+    m_subjects = re.search(r"Sujets d’étude\s*:?\s*\n*\s*(.*)", text)
+    data["Sujets d’étude"] = m_subjects.group(1).strip() if m_subjects else ""
 
     return data
 
-if st.button("Parser la fiche"):
-    fiche_text = extract_fiche_block(raw_text)
-    parsed = parse_fiche(fiche_text)
-    df = pd.DataFrame([parsed])
-    st.dataframe(df)
+if st.button("Extraire les informations"):
+    if raw_text.strip():
+        parsed = parse_notice(raw_text)
+        df = pd.DataFrame([parsed])
 
-    # Export Excel
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Fiche")
-    st.download_button(
-        label="Télécharger en XLSX",
-        data=output.getvalue(),
-        file_name="fiche_inha.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        st.dataframe(df)
 
+        # Export XLSX
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Notice")
+        st.download_button(
+            label="📥 Télécharger en XLSX",
+            data=output.getvalue(),
+            file_name="notice_inha.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.warning("Veuillez coller une notice avant d’extraire.")
