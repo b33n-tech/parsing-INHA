@@ -4,8 +4,8 @@ import re
 from io import BytesIO
 
 st.title("Scraping fiches INHA - Historiens d’art")
-st.write("Collez le contenu **complet** d’une page (Ctrl+A > Ctrl+V) ci-dessous :")
-raw_text = st.text_area("Page INHA")
+st.write("Collez le contenu **complet** de plusieurs pages ou notices (Ctrl+A > Ctrl+V) ci-dessous :")
+raw_text = st.text_area("Pages INHA")
 
 # --- Helpers -----------------------------------------------------------------
 UPPER = "A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇŒÆ"
@@ -19,24 +19,21 @@ LABELS = [
 LABELS_OR = "|".join(LABELS)
 STOP_AT_NEXT_LABEL = rf"(?=\r?\n(?:{LABELS_OR})\b|$)"
 
-# Normalise les retours à la ligne pour regex
 def normalize_text(t: str) -> str:
     return t.replace("\r\n", "\n").replace("\r", "\n")
 
-# Extrait le bloc de fiche depuis le texte complet
-def extract_fiche_block(text: str) -> str:
+def extract_fiches(text: str) -> list:
     text = normalize_text(text)
-    m = re.search(rf"(^[{UPPER}\-\s']+,.*?)(?:\n\n|$)", text, flags=re.S | re.M)
-    start_idx = m.start(1) if m else 0
-    return text[start_idx:]
+    # Séparer les fiches sur les lignes qui commencent par NOM en majuscules
+    pattern = rf"^([{UPPER}\-\s']+,.*?)(?=\n[{UPPER}\-\s']+,|$)"
+    matches = re.finditer(pattern, text, flags=re.S | re.M)
+    return [m.group(1).strip() for m in matches]
 
-# Extrait la ligne auteur(s)
 def extract_author(text: str) -> str | None:
     text = normalize_text(text)
     m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
     return m.group(2).strip() if m else None
 
-# Extrait une section après un label, avec strict pour ignorer les espaces/sauts
 def extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
     text = normalize_text(text)
     pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?){STOP_AT_NEXT_LABEL}"
@@ -47,7 +44,6 @@ def extract_section(label_regex: str, text: str, strict: bool = True) -> str | N
     val = re.sub(r"\s+", " ", val)
     return val or None
 
-# Parse le contenu de la fiche
 def parse_fiche(text: str) -> dict:
     text = normalize_text(text)
     data = {
@@ -71,7 +67,6 @@ def parse_fiche(text: str) -> dict:
     if m:
         data["Dernière mise à jour"] = m.group(1).strip()
 
-    # Dates / lieux: ligne type "(26 février 1781, Paris – 12 juillet 1863, Versailles)"
     m = re.search(r"\((.*?)\s*[–-]\s*(.*?)\)", text)
     if m:
         naissance = m.group(1).strip()
@@ -95,18 +90,18 @@ def parse_fiche(text: str) -> dict:
     return data
 
 # --- UI ----------------------------------------------------------------------
-if st.button("Parser la fiche"):
-    fiche_text = extract_fiche_block(raw_text)
-    parsed = parse_fiche(fiche_text)
-    df = pd.DataFrame([parsed])
+if st.button("Parser les fiches"):
+    all_fiches = extract_fiches(raw_text)
+    parsed_list = [parse_fiche(fiche) for fiche in all_fiches]
+    df = pd.DataFrame(parsed_list)
     st.dataframe(df)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Fiche")
+        df.to_excel(writer, index=False, sheet_name="Fiches")
     st.download_button(
-        label="Télécharger en XLSX",
+        label="Télécharger toutes les fiches en XLSX",
         data=output.getvalue(),
-        file_name="fiche_inha.xlsx",
+        file_name="fiches_inha.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
