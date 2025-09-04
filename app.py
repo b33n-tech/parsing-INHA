@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 from io import BytesIO
-from dateutil import parser as date_parser
 
 st.title("Scraping fiches INHA - Historiens d’art")
 
@@ -28,11 +27,11 @@ def extract_author(text: str) -> str | None:
     m = re.search(r"^\s*(Auteur(?:\(s\))? de la notice)\s*:?[\t ]*(.+)$", text, flags=re.M)
     return m.group(2).strip() if m else None
 
-def extract_section(label_regex: str, text: str, strict: bool = True) -> str | None:
+def extract_section(label_regex: str, text: str) -> str | None:
     text = normalize_text(text)
     if label_regex == "Sujets d’étude":
-        # Extraire jusqu'au mot 'Carrière'
-        pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?)(?=\bCarrière\b|$)"
+        # Extraire jusqu'au mot 'Carrère'
+        pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?)(?=\bCarrère\b|$)"
     else:
         pattern = rf"{label_regex}\s*:?[\t ]*\n*\s*(.+?){STOP_AT_NEXT_LABEL}"
     m = re.search(pattern, text, flags=re.S)
@@ -81,18 +80,30 @@ def parse_fiche(text: str) -> dict:
             data["Date Décès"] = deces
 
     data["Auteur de la notice"] = extract_author(text)
-    data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text, strict=True)
-    data["Autres activités"] = extract_section("Autres activités", text, strict=True)
-    data["Sujets d’étude"] = extract_section("Sujets d’étude", text, strict=True)
+    data["Profession ou activité principale"] = extract_section("Profession ou activité principale", text)
+    data["Autres activités"] = extract_section("Autres activités", text)
+    data["Sujets d’étude"] = extract_section("Sujets d’étude", text)
 
     return data
 
 # --- Step 2 : saisie des fiches avec session_state ---------------------------------
 if 'fiches_input' not in st.session_state:
-    st.session_state['fiches_input'] = ["" for _ in range(max_fiches)]
+    st.session_state['fiches_input'] = [""] * max_fiches
+else:
+    # Ajuster la longueur si max_fiches change
+    current_len = len(st.session_state['fiches_input'])
+    if max_fiches > current_len:
+        st.session_state['fiches_input'] += [""] * (max_fiches - current_len)
+    elif max_fiches < current_len:
+        st.session_state['fiches_input'] = st.session_state['fiches_input'][:max_fiches]
 
+# Affichage des text_area
 for i in range(max_fiches):
-    st.session_state['fiches_input'][i] = st.text_area(f"Fiche {i+1}", value=st.session_state['fiches_input'][i], key=f"fiche_{i}")
+    st.session_state['fiches_input'][i] = st.text_area(
+        f"Fiche {i+1}", 
+        value=st.session_state['fiches_input'][i], 
+        key=f"fiche_{i}"
+    )
 
 # --- Step 3 : Parser et afficher -------------------------------------------
 df = pd.DataFrame()
