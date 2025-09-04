@@ -9,16 +9,8 @@ st.title("Scraping fiches INHA - Historiens d’art")
 # Étape 1 : nombre de fiches à parser
 max_fiches = st.number_input("Nombre de fiches à parser", min_value=1, max_value=50, value=5, step=1)
 
-# Étape 2 : saisie des fiches une par une
-fiches_input = []
-for i in range(max_fiches):
-    fiche_text = st.text_area(f"Fiche {i+1}", key=f"fiche_{i}")
-    if fiche_text.strip():
-        fiches_input.append(fiche_text)
-
 # --- Helpers -----------------------------------------------------------------
 UPPER = "A-ZÉÈÀÙÂÊÎÔÛÄËÏÖÜÇŒÆ"
-
 LABELS = [
     "Profession ou activité principale",
     "Autres activités",
@@ -91,24 +83,36 @@ def parse_fiche(text: str) -> dict:
 
     return data
 
-# Étape 3 : Parser toutes les fiches
-parsed_list = []
+# --- Step 2 : saisie des fiches avec session_state ---------------------------------
+if 'fiches_input' not in st.session_state:
+    st.session_state['fiches_input'] = ["" for _ in range(max_fiches)]
+
+for i in range(max_fiches):
+    st.session_state['fiches_input'][i] = st.text_area(f"Fiche {i+1}", value=st.session_state['fiches_input'][i], key=f"fiche_{i}")
+
+# --- Step 3 : Parser et afficher -------------------------------------------
 df = pd.DataFrame()
 if st.button("Parser toutes les fiches"):
-    parsed_list = [parse_fiche(fiche) for fiche in fiches_input]
+    parsed_list = [parse_fiche(fiche) for fiche in st.session_state['fiches_input'] if fiche.strip()]
     df = pd.DataFrame(parsed_list)
-    st.dataframe(df)
+    st.session_state['df'] = df
 
-# Étape 4 : Convertir les colonnes de dates en DD/MM/YYYY
-if not df.empty and st.button("Convertir les dates en DD/MM/YYYY"):
-    for col in ["Dernière mise à jour", "Date Naissance", "Date Décès"]:
-        if col in df.columns:
-            df[col] = df[col].apply(lambda x: date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y") if pd.notna(x) and str(x).strip() != '' else '')
-    st.dataframe(df)
+if 'df' in st.session_state and not st.session_state['df'].empty:
+    df_display = st.session_state['df']
+    st.dataframe(df_display)
 
+    # --- Step 4 : conversion des dates --------------------------------------
+    if st.button("Convertir les dates en DD/MM/YYYY"):
+        for col in ["Dernière mise à jour", "Date Naissance", "Date Décès"]:
+            if col in st.session_state['df'].columns:
+                st.session_state['df'][col] = st.session_state['df'][col].apply(
+                    lambda x: date_parser.parse(str(x), dayfirst=True, fuzzy=True).strftime("%d/%m/%Y") if pd.notna(x) and str(x).strip() != '' else '')
+        st.dataframe(st.session_state['df'])
+
+    # --- Step 5 : Téléchargement -------------------------------------------
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Fiches")
+        st.session_state['df'].to_excel(writer, index=False, sheet_name="Fiches")
     st.download_button(
         label="Télécharger toutes les fiches en XLSX",
         data=output.getvalue(),
